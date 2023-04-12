@@ -18,6 +18,7 @@
   },
   "dependencies": {
     "dotenv": "^16.0.3",
+    "langchain": "^0.0.53",
     "openai": "^3.2.1"
   }
 }
