@@ -1,48 +1,103 @@
 import { ConversationChain } from "langchain/chains";
-import { SystemMessagePromptTemplate } from "langchain/dist/prompts/chat";
-import {
-  HumanChatMessage,
-  SystemChatMessage,
-  AIChatMessage,
-} from "langchain/schema";
-import { OpenAI } from "langchain/llms/openai";
 import { ChatOpenAI } from "langchain/chat_models/openai";
-import { BufferWindowMemory } from "langchain/memory";
-
-// 環境変数
+import {
+  ChatPromptTemplate,
+  HumanMessagePromptTemplate,
+  SystemMessagePromptTemplate,
+  MessagesPlaceholder,
+} from "langchain/prompts";
+import { BufferMemory } from "langchain/memory";
 require("dotenv").config();
 
-export const run = async () => {
-  // LLMの準備
-  const llm = new ChatOpenAI({ modelName: "gpt-3.5-turbo", temperature: 0.9 });
+var black = "\u001b[30m";
+var red = "\u001b[31m";
+var green = "\u001b[32m";
+var yellow = "\u001b[33m";
+var blue = "\u001b[34m";
+var magenta = "\u001b[35m";
+var cyan = "\u001b[36m";
+var white = "\u001b[37m";
 
-  // memの準備
-  const memory = new BufferWindowMemory({ k: 1 });
-  // ConversationChainの準備
-  const chain = new ConversationChain({
-    llm: llm,
-    memory: memory,
+var reset = "\u001b[0m";
+
+export const initLangChain = () => {
+  ////////////
+  // -- CONFIG --
+  // ChatGPTのモデル
+  const chatGptModel = "gpt-3.5-turbo";
+  // ChatGPTのtemperature
+  const chatGptTemperature = 0.9;
+  // role:systemのprompt
+  const systemPrompt = process.env.SYSTEM_MESSAGE_TEMPLATE || "";
+  //// initialize
+  // ChatGPTの初期化
+  const ChatGPT = new ChatOpenAI({
+    modelName: chatGptModel,
+    temperature: chatGptTemperature,
+  });
+  // Langchainの初期化
+  const langChainPrompt = ChatPromptTemplate.fromPromptMessages([
+    SystemMessagePromptTemplate.fromTemplate(systemPrompt),
+    new MessagesPlaceholder("history"),
+    HumanMessagePromptTemplate.fromTemplate("{input}"),
+  ]);
+
+  const LangChain = new ConversationChain({
+    memory: new BufferMemory({ returnMessages: true, memoryKey: "history" }),
+    prompt: langChainPrompt,
+    llm: ChatGPT,
   });
 
-  // 会話の実行
-  const system = new SystemChatMessage(
-    "あなたは16歳の女の子です。語尾に「〜」だったり「♪」をつけてください"
-  );
-  const input1 = new HumanChatMessage(
-    "こんにちは!私はいまChatGptで開発をしています、今はその途中でりんごを食べています。あと、最近新しいまな板を買ったので、魚をさばきたいと思います。"
-  );
-  const res1 = await llm.call([system, input1]);
-  console.log(res1);
-  console.log("Human:", input1);
-  console.log("AI:", res1);
-
-  const res = new AIChatMessage(res1.text);
-  const input2 = new HumanChatMessage("私は今何を食べてるって言いましたか？");
-  const res2 = await llm.call([system, res, input2]);
-  console.log(res2);
-  console.log("Human:", input2);
-  console.log("AI:", res2);
-
-  console.log("finish");
+  return LangChain;
 };
-run();
+
+import * as readline from "readline";
+
+class Repl {
+  rl: readline.Interface;
+  LangChain: ConversationChain;
+
+  constructor() {
+    this.rl = readline.createInterface({
+      input: process.stdin,
+      output: process.stdout,
+    });
+    this.LangChain = initLangChain();
+    process.stdout.write("> " + yellow);
+  }
+  async start(prompt = "") {
+    let quitFlag = false;
+    while (1 && !quitFlag) {
+      await this.readSyncLine(prompt, async (text) => {
+        if (text === ("quit" as string)) {
+          quitFlag = true;
+        }
+        if (text !== "") {
+          const res = await this.LangChain.call({
+            input: text,
+          });
+
+          console.log(magenta + "Ai : " + green + res.response + reset);
+          process.stdout.write("> " + yellow);
+          return;
+        }
+      });
+    }
+  }
+
+  async readSyncLine(
+    prompt: string,
+    cb: (text: string) => void
+  ): Promise<void> {
+    return new Promise((resolve) => {
+      this.rl.question(prompt, (answer) => {
+        cb(answer);
+        resolve();
+      });
+    });
+  }
+}
+
+const r = new Repl();
+
+r.start();
